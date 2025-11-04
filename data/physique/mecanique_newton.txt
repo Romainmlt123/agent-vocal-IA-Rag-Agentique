@@ -1,0 +1,92 @@
+# Sample Physics Document
+
+## Mécanique Classique - Les Lois de Newton
+
+### Première Loi de Newton (Principe d'Inertie)
+
+Un objet au repos reste au repos, et un objet en mouvement reste en mouvement à vitesse constante, à moins qu'une force extérieure n'agisse sur lui.
+
+**Équation** : Si ΣF = 0, alors v = constante
+
+### Deuxième Loi de Newton (Principe Fondamental)
+
+L'accélération d'un objet est directement proportionnelle à la force nette qui agit sur lui et inversement proportionnelle à sa masse.
+
+**Équation** : F = ma
+
+où :
+- F = force (en Newtons, N)
+- m = masse (en kilogrammes, kg)
+- a = accélération (en m/s²)
+
+### Troisième Loi de Newton (Action-Réaction)
+
+Pour chaque action, il existe une réaction égale et opposée.
+
+Si un objet A exerce une force FAB sur un objet B, alors B exerce une force FBA sur A telle que :
+**FAB = -FBA**
+
+## Énergie Cinétique
+
+L'énergie cinétique est l'énergie associée au mouvement d'un objet.
+
+**Formule** : Ec = (1/2)mv²
+
+où :
+- Ec = énergie cinétique (en Joules, J)
+- m = masse (kg)
+- v = vitesse (m/s)
+
+### Théorème de l'Énergie Cinétique
+
+Le travail total effectué sur un objet est égal à la variation de son énergie cinétique :
+
+**W = ΔEc = Ec_finale - Ec_initiale**
+
+## Énergie Potentielle Gravitationnelle
+
+L'énergie potentielle gravitationnelle est l'énergie stockée dans un objet en raison de sa position dans un champ gravitationnel.
+
+**Formule** : Ep = mgh
+
+où :
+- Ep = énergie potentielle (J)
+- m = masse (kg)
+- g = accélération gravitationnelle (≈ 9.8 m/s² sur Terre)
+- h = hauteur (m)
+
+## Conservation de l'Énergie Mécanique
+
+Dans un système isolé sans frottements, l'énergie mécanique totale (cinétique + potentielle) reste constante :
+
+**Em = Ec + Ep = constante**
+
+### Exemple : Chute Libre
+
+Un objet de masse m = 2 kg est lâché d'une hauteur h = 10 m.
+
+À l'instant initial (h = 10 m) :
+- Ep = mgh = 2 × 9.8 × 10 = 196 J
+- Ec = 0 J (v = 0)
+- Em = 196 J
+
+Juste avant de toucher le sol (h = 0 m) :
+- Ep = 0 J
+- Ec = 196 J
+- Em = 196 J (conservée!)
+
+La vitesse au sol : v = √(2gh) = √(2 × 9.8 × 10) ≈ 14 m/s
+
+## Quantité de Mouvement
+
+La quantité de mouvement (ou moment linéaire) est définie par :
+
+**p = mv**
+
+### Conservation de la Quantité de Mouvement
+
+Dans un système isolé, la quantité de mouvement totale est conservée :
+
+**Σp_avant = Σp_après**
+
+Cette loi est utilisée pour analyser les collisions.

@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# Models (too large for git)
+models/llm/*.gguf
+models/voices/*.onnx
+models/voices/*.onnx.json
+*.bin
+*.safetensors
+
+# FAISS indexes
+data/*/index.faiss
+data/*/index.pkl
+*.faiss
+*.pkl
+
+# Test outputs
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Audio files
+*.wav
+*.mp3
+*.ogg
+!tests/fixtures/*.wav
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Gradio outputs
+gradio_output.log
+nohup.out
+
+# Cache directories
+.cache/
+*.cache

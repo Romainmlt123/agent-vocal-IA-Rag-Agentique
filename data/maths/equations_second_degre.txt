@@ -1,0 +1,66 @@
+# Sample Math Document
+
+## Équations du Second Degré
+
+### Introduction
+
+Une équation du second degré est une équation de la forme :
+
+**ax² + bx + c = 0**
+
+où a, b, et c sont des constantes réelles et a ≠ 0.
+
+### Méthodes de Résolution
+
+#### 1. Factorisation
+
+Si l'équation peut être factorisée, on écrit :
+a(x - x₁)(x - x₂) = 0
+
+Les solutions sont alors x₁ et x₂.
+
+#### 2. Formule Quadratique
+
+La formule générale pour résoudre ax² + bx + c = 0 est :
+
+**x = (-b ± √(b² - 4ac)) / (2a)**
+
+Le discriminant Δ = b² - 4ac détermine le nombre de solutions :
+- Si Δ > 0 : deux solutions réelles distinctes
+- Si Δ = 0 : une solution réelle double
+- Si Δ < 0 : pas de solution réelle (deux solutions complexes)
+
+### Exemples
+
+#### Exemple 1 : x² - 5x + 6 = 0
+
+Factorisation : (x - 2)(x - 3) = 0
+Solutions : x = 2 ou x = 3
+
+#### Exemple 2 : 2x² + 3x - 2 = 0
+
+Utilisons la formule quadratique :
+- a = 2, b = 3, c = -2
+- Δ = 3² - 4(2)(-2) = 9 + 16 = 25
+- x = (-3 ± √25) / 4 = (-3 ± 5) / 4
+
+Solutions : x = 1/2 ou x = -2
+
+### Propriétés Importantes
+
+**Somme des racines** : x₁ + x₂ = -b/a
+
+**Produit des racines** : x₁ × x₂ = c/a
+
+### Applications
+
+Les équations du second degré apparaissent dans :
+- La physique (mouvement parabolique)
+- L'économie (optimisation)
+- La géométrie (aires et périmètres)
+
+### Exercices
+
+1. Résoudre : x² - 7x + 12 = 0
+2. Résoudre : 3x² + 5x + 2 = 0
+3. Trouver une équation dont les solutions sont 2 et -3

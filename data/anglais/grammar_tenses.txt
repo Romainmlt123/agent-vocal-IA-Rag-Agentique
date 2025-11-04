@@ -1,0 +1,116 @@
+# Sample English Document
+
+## English Grammar - Verb Tenses
+
+### Present Simple
+
+**Form**: Subject + base verb (+ s/es for 3rd person singular)
+
+**Uses**:
+- Habitual actions: "I walk to school every day."
+- General truths: "Water boils at 100°C."
+- Scheduled events: "The train leaves at 8 AM."
+
+**Examples**:
+- She works in a hospital.
+- They play football on Saturdays.
+- The sun rises in the east.
+
+### Present Continuous (Progressive)
+
+**Form**: Subject + am/is/are + verb-ing
+
+**Uses**:
+- Actions happening now: "I am studying English."
+- Temporary situations: "She is living in Paris this year."
+- Future arrangements: "We are meeting tomorrow."
+
+**Examples**:
+- He is reading a book.
+- They are watching TV right now.
+- It is raining outside.
+
+### Past Simple
+
+**Form**: Subject + verb-ed (regular) or irregular past form
+
+**Uses**:
+- Completed actions in the past: "I visited London last year."
+- Series of past actions: "She opened the door, entered, and sat down."
+
+**Regular verbs**: walk → walked, play → played
+**Irregular verbs**: go → went, see → saw, have → had
+
+**Examples**:
+- He finished his homework yesterday.
+- They went to the cinema last night.
+- I saw that movie three times.
+
+### Past Continuous
+
+**Form**: Subject + was/were + verb-ing
+
+**Uses**:
+- Actions in progress at a specific time in the past
+- Background action when another action happened
+
+**Examples**:
+- I was sleeping when you called.
+- They were playing chess at 7 PM yesterday.
+- While she was cooking, he was cleaning.
+
+### Present Perfect
+
+**Form**: Subject + have/has + past participle
+
+**Uses**:
+- Actions completed at an unspecified time: "I have visited France."
+- Actions with present results: "She has lost her keys."
+- Experiences: "Have you ever been to Japan?"
+
+**Examples**:
+- I have finished my work.
+- He has lived here for ten years.
+- They have never eaten sushi.
+
+### Future Simple
+
+**Form**: Subject + will + base verb
+
+**Uses**:
+- Predictions: "It will rain tomorrow."
+- Spontaneous decisions: "I'll help you with that."
+- Promises: "I will call you later."
+
+**Examples**:
+- She will arrive at 6 PM.
+- They will win the game.
+- I will be there on time.
+
+## Irregular Verbs - Common Examples
+
+| Base Form | Past Simple | Past Participle |
+|-----------|-------------|-----------------|
+| go        | went        | gone            |
+| see       | saw         | seen            |
+| do        | did         | done            |
+| have      | had         | had             |
+| make      | made        | made            |
+| take      | took        | taken           |
+| come      | came        | come            |
+| know      | knew        | known           |
+| get       | got         | got/gotten      |
+| give      | gave        | given           |
+
+## Practice Exercises
+
+1. Change to past simple: "I (see) him yesterday."
+2. Use present perfect: "She (visit) Paris three times."
+3. Form a question: "They are studying English." → "___?"
+
+### Time Expressions
+
+**Present Simple**: always, usually, often, sometimes, never
+**Past Simple**: yesterday, last week, ago, in 2020
+**Present Perfect**: already, yet, just, ever, never, since, for
+**Future**: tomorrow, next week, in the future

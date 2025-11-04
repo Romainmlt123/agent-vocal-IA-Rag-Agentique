@@ -1,0 +1,37 @@
+# Core dependencies - pinned for stability
+# Python 3.10+ required
+
+# ASR - Speech to Text
+faster-whisper==1.0.3
+torch>=2.2.0
+torchaudio>=2.2.0
+# Silero VAD
+soundfile==0.12.1
+numpy>=1.24.3,<2.0.0
+
+# RAG - Retrieval Augmented Generation
+sentence-transformers>=2.2.2
+faiss-cpu>=1.7.4
+pypdf>=3.17.4
+pymupdf>=1.23.8
+
+# LLM - Local Language Model
+llama-cpp-python>=0.2.27
+
+# TTS - Text to Speech
+# piper-tts==1.2.0  # Commented: install manually if needed
+
+# UI
+gradio>=4.13.0
+
+# Utilities
+PyYAML>=6.0.1
+python-dotenv>=1.0.0
+tqdm>=4.66.1
+scikit-learn>=1.3.2
+
+# Development
+pytest>=7.4.3
+pytest-cov>=4.1.0
+flake8>=6.1.0
+black>=23.12.1
