@@ -1,0 +1,56 @@
+# Requirements pour Google Colab - Agent Vocal IA avec Pipecat
+# Optimisé pour GPU T4/A100
+
+# ========== Framework Principal ==========
+pipecat-ai>=0.0.40
+
+# ========== Deep Learning & Audio ==========
+torch>=2.0.0
+torchaudio>=2.0.0
+torchvision>=0.15.0
+
+# ========== STT (Speech-to-Text) ==========
+openai-whisper>=20231117
+faster-whisper>=1.0.0
+# Alternative: whisper-timestamped
+
+# ========== TTS (Text-to-Speech) Local ==========
+piper-tts>=1.2.0
+# Alternative: coqui-tts (plus lourd mais meilleure qualité)
+# coqui-tts>=0.22.0
+
+# ========== LLM Local ==========
+# Ollama sera installé séparément via script bash
+# Pour alternative directe: llama-cpp-python
+llama-cpp-python>=0.2.0
+
+# ========== RAG & Vectorstore ==========
+langchain>=0.1.0
+langchain-community>=0.0.10
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+
+# ========== Audio Processing ==========
+sounddevice>=0.4.6
+soundfile>=0.12.1
+numpy>=1.24.0
+scipy>=1.11.0
+librosa>=0.10.0
+pyaudio>=0.2.13
+
+# ========== Utilities ==========
+nest-asyncio>=1.5.8  # Pour asyncio dans Jupyter
+aiofiles>=23.0.0
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pyyaml>=6.0
+
+# ========== Colab Specific ==========
+ipywidgets>=8.0.0
+tqdm>=4.66.0
+matplotlib>=3.7.0
+
+# ========== Optional: Monitoring ==========
+# tensorboard>=2.14.0
+# wandb>=0.16.0
