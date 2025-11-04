@@ -80,3 +80,11 @@ nohup.out
 # Cache directories
 .cache/
 *.cache
+
+# Git documentation temporaire
+GIT_*.md
+REPO_READY.md
+.github-badge.md
+
+# Test scripts temporaires
+test_audio_asr.py

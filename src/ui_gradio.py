@@ -6,6 +6,7 @@ import gradio as gr
 import numpy as np
 from typing import Optional, Tuple, List
 import time
+from scipy import signal
 
 from .config import get_config
 from .orchestrator import get_orchestrator, SessionState
@@ -108,6 +109,15 @@ class VoiceTutoringUI:
             if len(audio_data.shape) > 1:
                 audio_data = audio_data.mean(axis=1)
             
+            # Resample to 16kHz if needed (Whisper expects 16kHz)
+            target_sr = 16000
+            if sample_rate != target_sr:
+                logger.info(f"Resampling audio from {sample_rate}Hz to {target_sr}Hz")
+                # Calculate number of samples in target sample rate
+                num_samples = int(len(audio_data) * target_sr / sample_rate)
+                audio_data = signal.resample(audio_data, num_samples)
+                logger.info(f"Resampled audio shape: {audio_data.shape}")
+            
             # Create session if needed
             if self.current_session is None:
                 self.current_session = self.orchestrator.create_session()
@@ -120,7 +130,7 @@ class VoiceTutoringUI:
             hints_l3 = ""
             rag_sources = ""
             
-            for event in self.orchestrator.process_audio(self.current_session, audio_data, sample_rate):
+            for event in self.orchestrator.process_audio(self.current_session, audio_data):
                 if event.type == "transcript":
                     transcript = event.data
                 elif event.type == "subject_detected":
