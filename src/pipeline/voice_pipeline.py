@@ -281,6 +281,9 @@ class VoicePipeline:
                 logger.error("Pipeline execution timeout")
                 raise
             
+            # Wait for TTS frames to be fully collected
+            await asyncio.sleep(2.0)
+            
             # Collect results
             transcription = self.transcription_collector.get_transcription()
             response_text = self.response_collector.get_response()
@@ -340,8 +343,9 @@ class VoicePipeline:
             logger.debug("Running pipeline...")
             await self.runner.run(self.task)
             
-            # Wait a bit for frames to be processed
-            await asyncio.sleep(0.5)
+            # Wait for TTS frames to be fully collected
+            # The audio generation can take a few seconds
+            await asyncio.sleep(2.0)  # Increased from 0.5 to 2.0 seconds
             
             # Collect results
             response_text = self.response_collector.get_response()
