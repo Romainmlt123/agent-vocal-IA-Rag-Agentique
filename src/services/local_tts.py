@@ -192,31 +192,34 @@ class LocalTTSService(FrameProcessor):
             
             for audio_chunk in voice.synthesize(text_input):
                 chunk_count += 1
+                audio_bytes = None
                 
-                # Piper's AudioChunk has _audio_int16_bytes attribute with ready-to-use PCM data
-                if hasattr(audio_chunk, '_audio_int16_bytes'):
+                # Try to get audio data from AudioChunk in order of preference
+                
+                # 1. Try _audio_int16_bytes (ready-to-use PCM data)
+                if hasattr(audio_chunk, '_audio_int16_bytes') and audio_chunk._audio_int16_bytes is not None:
                     audio_bytes = audio_chunk._audio_int16_bytes
-                    if audio_bytes is not None and len(audio_bytes) > 0:
-                        audio_chunks.append(audio_bytes)
-                        logger.debug(f"Chunk {chunk_count}: extracted {len(audio_bytes)} bytes")
-                    else:
-                        logger.debug(f"Chunk {chunk_count}: _audio_int16_bytes is None or empty")
-                elif hasattr(audio_chunk, 'audio_float_array'):
-                    # Fallback: convert float array to int16 PCM
+                    if len(audio_bytes) > 0:
+                        logger.debug(f"Chunk {chunk_count}: extracted {len(audio_bytes)} bytes from _audio_int16_bytes")
+                
+                # 2. Try audio_float_array (convert to PCM)
+                if audio_bytes is None and hasattr(audio_chunk, 'audio_float_array') and audio_chunk.audio_float_array is not None:
                     float_array = audio_chunk.audio_float_array
-                    if float_array is not None and len(float_array) > 0:
+                    if len(float_array) > 0:
                         audio_int16 = (float_array * 32767).astype(np.int16)
                         audio_bytes = audio_int16.tobytes()
-                        audio_chunks.append(audio_bytes)
-                        logger.debug(f"Chunk {chunk_count}: converted float array to {len(audio_bytes)} bytes")
-                    else:
-                        logger.debug(f"Chunk {chunk_count}: audio_float_array is None or empty")
-                elif isinstance(audio_chunk, bytes):
-                    if len(audio_chunk) > 0:
-                        audio_chunks.append(audio_chunk)
-                        logger.debug(f"Chunk {chunk_count}: direct bytes {len(audio_chunk)} bytes")
+                        logger.debug(f"Chunk {chunk_count}: converted {len(audio_bytes)} bytes from audio_float_array")
+                
+                # 3. Try direct bytes
+                if audio_bytes is None and isinstance(audio_chunk, bytes) and len(audio_chunk) > 0:
+                    audio_bytes = audio_chunk
+                    logger.debug(f"Chunk {chunk_count}: direct bytes {len(audio_bytes)}")
+                
+                # Add to collection if we got valid audio
+                if audio_bytes and len(audio_bytes) > 0:
+                    audio_chunks.append(audio_bytes)
                 else:
-                    logger.warning(f"Chunk {chunk_count}: unknown format {type(audio_chunk).__name__}")
+                    logger.warning(f"Chunk {chunk_count}: no valid audio data found")
             
             logger.debug(f"Collected {chunk_count} chunks, total {len(audio_chunks)} byte arrays")
             
