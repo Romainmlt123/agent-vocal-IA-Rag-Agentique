@@ -196,18 +196,25 @@ class LocalTTSService(FrameProcessor):
                 # Piper's AudioChunk has _audio_int16_bytes attribute with ready-to-use PCM data
                 if hasattr(audio_chunk, '_audio_int16_bytes'):
                     audio_bytes = audio_chunk._audio_int16_bytes
-                    audio_chunks.append(audio_bytes)
-                    logger.debug(f"Chunk {chunk_count}: extracted {len(audio_bytes)} bytes")
+                    if audio_bytes is not None and len(audio_bytes) > 0:
+                        audio_chunks.append(audio_bytes)
+                        logger.debug(f"Chunk {chunk_count}: extracted {len(audio_bytes)} bytes")
+                    else:
+                        logger.debug(f"Chunk {chunk_count}: _audio_int16_bytes is None or empty")
                 elif hasattr(audio_chunk, 'audio_float_array'):
                     # Fallback: convert float array to int16 PCM
                     float_array = audio_chunk.audio_float_array
-                    audio_int16 = (float_array * 32767).astype(np.int16)
-                    audio_bytes = audio_int16.tobytes()
-                    audio_chunks.append(audio_bytes)
-                    logger.debug(f"Chunk {chunk_count}: converted float array to {len(audio_bytes)} bytes")
+                    if float_array is not None and len(float_array) > 0:
+                        audio_int16 = (float_array * 32767).astype(np.int16)
+                        audio_bytes = audio_int16.tobytes()
+                        audio_chunks.append(audio_bytes)
+                        logger.debug(f"Chunk {chunk_count}: converted float array to {len(audio_bytes)} bytes")
+                    else:
+                        logger.debug(f"Chunk {chunk_count}: audio_float_array is None or empty")
                 elif isinstance(audio_chunk, bytes):
-                    audio_chunks.append(audio_chunk)
-                    logger.debug(f"Chunk {chunk_count}: direct bytes {len(audio_chunk)} bytes")
+                    if len(audio_chunk) > 0:
+                        audio_chunks.append(audio_chunk)
+                        logger.debug(f"Chunk {chunk_count}: direct bytes {len(audio_chunk)} bytes")
                 else:
                     logger.warning(f"Chunk {chunk_count}: unknown format {type(audio_chunk).__name__}")
             
