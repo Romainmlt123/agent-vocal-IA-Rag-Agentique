@@ -1,2 +1,0 @@
-# Additional dependencies for streaming voice mode
-sounddevice>=0.4.6  # Real-time audio capture from microphone
