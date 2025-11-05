@@ -341,16 +341,8 @@ class VoicePipeline:
         self.audio_buffer.clear_buffer()
         
         try:
-            # IMPORTANT: Create new task and runner for each call
-            # This is necessary when called from different event loops (like Gradio)
-            task = PipelineTask(
-                self.pipeline,
-                params=PipelineParams(
-                    enable_metrics=True,
-                    enable_usage_metrics=True
-                )
-            )
-            runner = PipelineRunner(handle_sigint=False)
+            # Use EXISTING task - don't create new one!
+            # This avoids event loop conflicts
             
             # Create text frame (simulate transcription)
             # TranscriptionFrame requires timestamp in newer Pipecat versions
@@ -361,17 +353,13 @@ class VoicePipeline:
                 timestamp=time.time()
             )
             
-            # Queue frames
-            await task.queue_frames([StartFrame(), text_frame, EndFrame()])
+            # Queue frames on EXISTING task
+            logger.debug("Queueing frames on existing task...")
+            await self.task.queue_frames([text_frame])
             
-            # Run pipeline with proper await
-            logger.debug("Running pipeline...")
-            await runner.run(task)
-            
-            # Wait for TTS frames to be fully collected
-            # Reduce wait time to avoid long delays
-            logger.debug("Pipeline finished, waiting for frame collection...")
-            await asyncio.sleep(1.0)  # Reduced from 5.0 to 1.0 seconds
+            # Wait for processing - reduced to minimum
+            logger.debug("Waiting for frame processing...")
+            await asyncio.sleep(2.0)  # Short delay for frame collection
             
             # Collect results
             response_text = self.response_collector.get_response()

@@ -104,9 +104,9 @@ class GradioVoiceInterface:
             logger.error(f"Error processing audio: {e}", exc_info=True)
             return f"❌ Erreur: {str(e)}", "", "", None
     
-    def process_text_sync(self, text_input):
+    async def process_text_async(self, text_input):
         """
-        Process text input (synchronous wrapper)
+        Process text input (async version for Colab)
         
         Args:
             text_input: Text question from user
@@ -121,31 +121,13 @@ class GradioVoiceInterface:
         if not text_input or text_input.strip() == "":
             return "❓ Non détecté", "❌ Veuillez entrer une question", None
         
-        # Return immediate feedback
         try:
-            # First, return a "processing" message
-            processing_msg = f"🔄 Traitement en cours de votre question...\n\nQuestion: {text_input}\n\n"
+            logger.info(f"Processing text (async): '{text_input}'")
             
-            logger.info(f"Processing text: '{text_input}'")
+            # Call pipeline directly without creating new event loop
+            result = await self.pipeline.process_text(text_input)
             
-            # Run pipeline asynchronously using existing event loop if available
-            try:
-                # Try to get existing loop (Colab/Jupyter)
-                loop = asyncio.get_running_loop()
-                logger.info("Using existing event loop")
-                # If we have a running loop, use run_in_executor to avoid conflicts
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    result = executor.submit(
-                        lambda: asyncio.run(self.pipeline.process_text(text_input))
-                    ).result()
-            except RuntimeError:
-                # No running loop, create a new one
-                logger.info("Creating new event loop")
-                result = asyncio.run(self.pipeline.process_text(text_input))
-            
-            logger.info(f"Pipeline returned result: {type(result)}")
-            logger.info(f"Result keys: {result.keys() if result else 'None'}")
+            logger.info(f"Pipeline returned: {result.keys() if result else 'None'}")
             
             # Extract results
             subject = result.get('subject', 'unknown')
@@ -194,6 +176,21 @@ class GradioVoiceInterface:
             
         except Exception as e:
             logger.error(f"Error processing text: {e}", exc_info=True)
+            return "", f"❌ Erreur: {str(e)}", None
+    
+    def process_text_sync(self, text_input):
+        """
+        Synchronous wrapper that runs async function in event loop
+        """
+        try:
+            # Get the current event loop (should be Colab's loop)
+            import nest_asyncio
+            nest_asyncio.apply()  # Allow nested event loops
+            
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(self.process_text_async(text_input))
+        except Exception as e:
+            logger.error(f"Sync wrapper error: {e}", exc_info=True)
             return "", f"❌ Erreur: {str(e)}", None
     
     def build_interface(self):
