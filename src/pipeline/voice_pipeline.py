@@ -341,11 +341,17 @@ class VoicePipeline:
         self.audio_buffer.clear_buffer()
         
         try:
-            # Use EXISTING task - don't create new one!
-            # This avoids event loop conflicts
+            # Create TEMPORARY task and runner for this request
+            task = PipelineTask(
+                self.pipeline,
+                params=PipelineParams(
+                    enable_metrics=True,
+                    enable_usage_metrics=True
+                )
+            )
+            runner = PipelineRunner(handle_sigint=False)
             
             # Create text frame (simulate transcription)
-            # TranscriptionFrame requires timestamp in newer Pipecat versions
             import time
             text_frame = TranscriptionFrame(
                 text=text, 
@@ -353,21 +359,30 @@ class VoicePipeline:
                 timestamp=time.time()
             )
             
-            # Queue frames on EXISTING task
-            logger.debug("Queueing frames on existing task...")
-            await self.task.queue_frames([text_frame])
+            # Queue frames with Start/End
+            await task.queue_frames([StartFrame(), text_frame, EndFrame()])
+            logger.debug("Frames queued with Start/End")
             
-            # Wait for processing - reduced to minimum
-            logger.debug("Waiting for frame processing...")
-            await asyncio.sleep(2.0)  # Short delay for frame collection
+            # Run pipeline in background task WITHOUT blocking
+            logger.debug("Starting runner as background task...")
+            runner_task = asyncio.create_task(runner.run(task))
+            
+            # Wait for runner to complete (with timeout)
+            try:
+                await asyncio.wait_for(runner_task, timeout=30.0)
+                logger.debug("Runner completed successfully")
+            except asyncio.TimeoutError:
+                logger.error("Runner timeout after 30s")
+                raise
+            
+            # Short delay for frame collection
+            await asyncio.sleep(0.5)
             
             # Collect results
             response_text = self.response_collector.get_response()
             output_audio = self.audio_buffer.get_audio_bytes()
             
             logger.debug(f"After collection: response={len(response_text)} chars, audio={len(output_audio)} bytes")
-            logger.debug(f"Response collector text: '{response_text[:100] if response_text else 'EMPTY'}'")
-            logger.debug(f"Audio buffer has {len(self.audio_buffer.audio_buffer)} chunks")
             
             # Get subject from RAG service
             subject = getattr(self.rag_service, 'last_detected_subject', 'unknown')
