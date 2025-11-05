@@ -177,10 +177,17 @@ class LocalTTSService(FrameProcessor):
         
         def _synthesize_blocking(voice, text_input):
             """Blocking synthesis that consumes the generator."""
-            # Piper returns a generator of audio chunks
+            # Piper returns a generator of AudioChunk objects
             audio_chunks = []
             for audio_chunk in voice.synthesize(text_input):
-                audio_chunks.append(audio_chunk)
+                # Extract bytes from AudioChunk object
+                if hasattr(audio_chunk, 'audio'):
+                    audio_chunks.append(audio_chunk.audio)
+                elif isinstance(audio_chunk, bytes):
+                    audio_chunks.append(audio_chunk)
+                else:
+                    # Fallback: convert to bytes if possible
+                    audio_chunks.append(bytes(audio_chunk))
             
             # Concatenate all chunks into single bytes object
             return b''.join(audio_chunks)
