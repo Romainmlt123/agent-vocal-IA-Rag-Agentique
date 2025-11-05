@@ -10,7 +10,7 @@ import tempfile
 from typing import Optional, AsyncGenerator
 from pathlib import Path
 
-from pipecat.frames.frames import Frame, AudioRawFrame, TextFrame, ErrorFrame, TTSAudioRawFrame
+from pipecat.frames.frames import Frame, AudioRawFrame, TextFrame, ErrorFrame, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
 from pipecat.processors.frame_processor import FrameProcessor
 from loguru import logger
 
@@ -140,12 +140,16 @@ class LocalTTSService(FrameProcessor):
             
             logger.debug(f"Synthesizing: {text[:50]}...")
             
+            # Send TTS started frame
+            await self.push_frame(TTSStartedFrame(), direction)
+            
             # Generate audio
             audio_bytes = await self._synthesize(text)
             
             # Skip if no audio generated
             if not audio_bytes or len(audio_bytes) == 0:
                 logger.warning("No audio generated, skipping frame")
+                await self.push_frame(TTSStoppedFrame(), direction)
                 return
             
             # Create audio frame using TTSAudioRawFrame (has proper ID handling)
@@ -159,8 +163,13 @@ class LocalTTSService(FrameProcessor):
             await self.push_frame(audio_frame, direction)
             logger.debug(f"Audio generated: {len(audio_bytes)} bytes")
             
+            # Send TTS stopped frame
+            await self.push_frame(TTSStoppedFrame(), direction)
+            
         except Exception as e:
             logger.error(f"TTS error: {e}")
+            # Send stopped frame on error
+            await self.push_frame(TTSStoppedFrame(), direction)
             error_frame = ErrorFrame(error=str(e))
             await self.push_frame(error_frame, direction)
     
