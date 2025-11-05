@@ -174,9 +174,21 @@ class LocalTTSService(FrameProcessor):
         
         # Run synthesis in executor to avoid blocking
         loop = asyncio.get_event_loop()
+        
+        def _synthesize_blocking(voice, text_input):
+            """Blocking synthesis that consumes the generator."""
+            # Piper returns a generator of audio chunks
+            audio_chunks = []
+            for audio_chunk in voice.synthesize(text_input):
+                audio_chunks.append(audio_chunk)
+            
+            # Concatenate all chunks into single bytes object
+            return b''.join(audio_chunks)
+        
         audio_data = await loop.run_in_executor(
             None,
-            self._voice.synthesize,
+            _synthesize_blocking,
+            self._voice,
             text
         )
         
