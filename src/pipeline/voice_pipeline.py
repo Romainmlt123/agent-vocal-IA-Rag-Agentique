@@ -1,444 +1,442 @@
 """
-Pipeline orchestrator for voice AI agent with RAG.
-
-This module provides the main pipeline that integrates:
-- STT (Whisper) -> RAG (multi-subject routing) -> LLM (Ollama) -> TTS (Piper)
-
-Based on Pipecat framework for real-time streaming audio.
+Voice Pipeline pour Agent IA avec Pipecat Framework
+Optimisé pour Google Colab et interface Gradio
 """
 
 import asyncio
-import os
-from typing import Optional, Dict, Any, List
-from loguru import logger
+import logging
+from typing import Optional, Dict, Any
+from pathlib import Path
 
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask, PipelineParams
-from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
-from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.processors.aggregators.llm_response import LLMAssistantResponseAggregator, LLMUserResponseAggregator
 from pipecat.frames.frames import (
     Frame,
+    AudioRawFrame,
     TextFrame,
     TranscriptionFrame,
-    LLMMessagesAppendFrame,
-    LLMRunFrame,
     EndFrame,
+    StartFrame,
+    LLMMessagesFrame,
+    TTSAudioRawFrame,
+    TTSStartedFrame,
+    TTSStoppedFrame
 )
+from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 
-from src.services.local_stt import LocalSTTService
-from src.services.local_llm import LocalLLMService
-from src.services.local_tts import LocalTTSService
-from src.services.rag_service import RAGService
+# Import local services
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+from services.local_stt import LocalSTTService
+from services.local_llm import LocalLLMService
+from services.local_tts import LocalTTSService
+from services.rag_service import RAGService
+
+logger = logging.getLogger(__name__)
 
 
-class VoicePipelineOrchestrator:
+class AudioBufferProcessor(FrameProcessor):
+    """Processeur pour collecter l'audio de sortie"""
+    
+    def __init__(self):
+        super().__init__()
+        self.audio_buffer = []
+        self.sample_rate = 22050
+        self.is_collecting = False
+        
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        
+        if isinstance(frame, TTSStartedFrame):
+            self.is_collecting = True
+            self.audio_buffer = []
+            logger.debug("Started collecting audio")
+            
+        elif isinstance(frame, TTSAudioRawFrame):
+            if self.is_collecting:
+                self.audio_buffer.append(frame.audio)
+                logger.debug(f"Collected {len(frame.audio)} bytes of audio")
+                
+        elif isinstance(frame, TTSStoppedFrame):
+            self.is_collecting = False
+            logger.debug(f"Stopped collecting audio, total buffers: {len(self.audio_buffer)}")
+        
+        await self.push_frame(frame, direction)
+    
+    def get_audio_bytes(self) -> bytes:
+        """Récupère l'audio collecté"""
+        if not self.audio_buffer:
+            return b''
+        return b''.join(self.audio_buffer)
+    
+    def clear_buffer(self):
+        """Vide le buffer audio"""
+        self.audio_buffer = []
+
+
+class TranscriptionCollector(FrameProcessor):
+    """Collecteur pour la transcription STT"""
+    
+    def __init__(self):
+        super().__init__()
+        self.transcription = ""
+        
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        
+        if isinstance(frame, TranscriptionFrame):
+            self.transcription = frame.text
+            logger.info(f"Transcription: {self.transcription}")
+        
+        await self.push_frame(frame, direction)
+    
+    def get_transcription(self) -> str:
+        """Récupère la dernière transcription"""
+        return self.transcription
+    
+    def clear(self):
+        """Efface la transcription"""
+        self.transcription = ""
+
+
+class ResponseCollector(FrameProcessor):
+    """Collecteur pour la réponse du LLM"""
+    
+    def __init__(self):
+        super().__init__()
+        self.response = ""
+        self.is_collecting = False
+        
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        
+        if isinstance(frame, TextFrame) and not isinstance(frame, TranscriptionFrame):
+            # C'est une réponse du LLM ou du RAG
+            if frame.text:
+                self.response += frame.text
+                logger.debug(f"Response chunk: {frame.text}")
+        
+        await self.push_frame(frame, direction)
+    
+    def get_response(self) -> str:
+        """Récupère la réponse complète"""
+        return self.response
+    
+    def clear(self):
+        """Efface la réponse"""
+        self.response = ""
+
+
+class VoicePipeline:
     """
-    Orchestrates the complete voice AI pipeline with RAG.
-    
-    Pipeline flow:
-    1. Audio input → Whisper STT → Text transcription
-    2. Text → RAG Service (routing + retrieval) → Context
-    3. Text + Context → Ollama LLM → Response
-    4. Response → Piper TTS → Audio output
-    
-    Features:
-    - Real-time streaming with <2s latency
-    - Multi-subject RAG routing (maths, physique, anglais)
-    - Asynchronous frame processing
-    - Context aggregation for conversation history
+    Pipeline vocal complet pour Google Colab
+    Gère : Audio Input → STT → RAG → LLM → TTS → Audio Output
     """
     
     def __init__(
         self,
-        stt_model_size: str = "base",
-        llm_model: str = "qwen2:1.5b",
-        tts_voice: str = "fr_FR-siwis-medium",
-        rag_top_k: int = 4,
-        enable_metrics: bool = True,
-        ollama_url: str = "http://localhost:11434",
+        whisper_model: str = "base",
+        ollama_model: str = "qwen2:1.5b",
+        device: str = "cuda",
+        rag_data_path: str = "data"
     ):
         """
-        Initialize the voice pipeline orchestrator.
+        Initialize Voice Pipeline
         
         Args:
-            stt_model_size: Whisper model size (tiny/base/small/medium/large)
-            llm_model: Ollama model name
-            tts_voice: Piper TTS voice name
-            rag_top_k: Number of documents to retrieve from RAG
-            enable_metrics: Enable performance metrics
-            ollama_url: Ollama server URL
+            whisper_model: Taille du modèle Whisper (tiny, base, small, medium, large)
+            ollama_model: Modèle Ollama à utiliser
+            device: Device pour les modèles (cuda, cpu)
+            rag_data_path: Chemin vers les données RAG
         """
-        self.stt_model_size = stt_model_size
-        self.llm_model = llm_model
-        self.tts_voice = tts_voice
-        self.rag_top_k = rag_top_k
-        self.enable_metrics = enable_metrics
-        self.ollama_url = ollama_url
+        self.whisper_model = whisper_model
+        self.ollama_model = ollama_model
+        self.device = device
+        self.rag_data_path = rag_data_path
         
-        # Services (initialized in setup)
-        self.stt: Optional[LocalSTTService] = None
-        self.llm: Optional[LocalLLMService] = None
-        self.tts: Optional[LocalTTSService] = None
-        self.rag: Optional[RAGService] = None
+        # Services
+        self.stt_service: Optional[LocalSTTService] = None
+        self.llm_service: Optional[LocalLLMService] = None
+        self.tts_service: Optional[LocalTTSService] = None
+        self.rag_service: Optional[RAGService] = None
+        
+        # Collectors
+        self.transcription_collector = TranscriptionCollector()
+        self.response_collector = ResponseCollector()
+        self.audio_buffer = AudioBufferProcessor()
         
         # Pipeline components
         self.pipeline: Optional[Pipeline] = None
         self.task: Optional[PipelineTask] = None
         self.runner: Optional[PipelineRunner] = None
-        self.context_aggregator: Optional[LLMContextAggregatorPair] = None
         
-        # System prompt
-        self.system_prompt = """Tu es un assistant pédagogique vocal intelligent.
-
-**Ton rôle :**
-- Aider les étudiants en mathématiques, physique et anglais
-- Guider sans donner les réponses directement
-- Poser des questions pour stimuler la réflexion
-- Expliquer les concepts de manière claire et progressive
-
-**Règles importantes :**
-- Réponds en français (sauf pour l'anglais)
-- Sois concis et précis
-- Utilise les documents fournis par le système RAG
-- Ne génère PAS de caractères spéciaux (ta sortie sera convertie en audio)
-- Si tu ne connais pas la réponse, dis-le honnêtement
-
-**Format de réponse :**
-- Phrases courtes et claires
-- Pas de markdown, LaTeX ou formules complexes en texte
-- Utilise des mots simples pour les formules (ex: "x au carré plus 2x égale 0")
-"""
-        
-        logger.info(f"VoicePipelineOrchestrator initialized")
-        logger.info(f"  - STT: Whisper {stt_model_size}")
-        logger.info(f"  - LLM: {llm_model}")
-        logger.info(f"  - TTS: {tts_voice}")
-        logger.info(f"  - RAG: Top-{rag_top_k} retrieval")
+        logger.info(f"VoicePipeline initialized with Whisper={whisper_model}, Ollama={ollama_model}")
     
-    async def setup(self):
-        """Initialize all services and build the pipeline."""
-        logger.info("Setting up voice pipeline...")
+    async def initialize_services(self):
+        """Initialize all services"""
+        logger.info("Initializing services...")
         
-        # 1. Initialize services
-        logger.info("Initializing STT service...")
-        self.stt = LocalSTTService(
-            model_size=self.stt_model_size,
-            language="fr",
-            device="cuda"
+        # STT Service
+        self.stt_service = LocalSTTService(
+            model_size=self.whisper_model,
+            device=self.device,
+            language="fr"
         )
+        logger.info(f"✓ STT Service initialized (Whisper {self.whisper_model})")
         
-        logger.info("Initializing LLM service...")
-        self.llm = LocalLLMService(
-            base_url=self.ollama_url,
-            model=self.llm_model,
+        # RAG Service
+        self.rag_service = RAGService(
+            data_path=self.rag_data_path,
+            device=self.device
+        )
+        logger.info(f"✓ RAG Service initialized")
+        
+        # LLM Service
+        self.llm_service = LocalLLMService(
+            model=self.ollama_model,
             temperature=0.7,
             max_tokens=512
         )
+        logger.info(f"✓ LLM Service initialized (Ollama {self.ollama_model})")
         
-        logger.info("Initializing TTS service...")
-        self.tts = LocalTTSService(
-            voice=self.tts_voice,
-            speed=1.0
+        # TTS Service
+        self.tts_service = LocalTTSService(
+            model_name="fr_FR-siwis-medium",
+            device=self.device
         )
+        logger.info(f"✓ TTS Service initialized (Piper)")
         
-        logger.info("Initializing RAG service...")
-        self.rag = RAGService(
-            data_dir="data",
-            top_k=self.rag_top_k
-        )
-        await self.rag.initialize()
-        
-        # 2. Setup LLM context
-        messages = [
-            {"role": "system", "content": self.system_prompt}
-        ]
-        context = LLMContext(messages)
-        self.context_aggregator = LLMContextAggregatorPair(context)
-        
-        # 3. Build pipeline
-        # Pipeline flow: STT → RAG → LLM → TTS
+        logger.info("✅ All services initialized successfully")
+    
+    def build_pipeline(self):
+        """Build the Pipecat pipeline"""
         logger.info("Building pipeline...")
+        
+        if not all([self.stt_service, self.rag_service, self.llm_service, self.tts_service]):
+            raise RuntimeError("Services not initialized. Call initialize_services() first.")
+        
+        # Create pipeline with all processors in order
         self.pipeline = Pipeline([
-            self.stt,                           # Audio → Text transcription
-            self.context_aggregator.user(),     # Add user message to context
-            self.rag,                            # Retrieve relevant documents
-            self.llm,                            # Generate response
-            self.tts,                            # Text → Audio
-            self.context_aggregator.assistant(), # Add assistant response to context
+            self.stt_service,              # Audio → Text transcription
+            self.transcription_collector,  # Collect transcription
+            self.rag_service,              # Add RAG context
+            self.llm_service,              # Generate response
+            self.response_collector,       # Collect response
+            self.tts_service,              # Text → Audio synthesis
+            self.audio_buffer              # Collect output audio
         ])
         
-        # 4. Create pipeline task
+        # Create task
         self.task = PipelineTask(
             self.pipeline,
             params=PipelineParams(
-                enable_metrics=self.enable_metrics,
-                enable_usage_metrics=self.enable_metrics,
+                enable_metrics=True,
+                enable_usage_metrics=True
             )
         )
         
-        # 5. Create runner
-        self.runner = PipelineRunner()
+        # Create runner
+        self.runner = PipelineRunner(handle_sigint=False)
         
-        logger.info("✅ Voice pipeline setup complete!")
+        logger.info("✅ Pipeline built successfully")
     
-    async def process_audio(self, audio_data: bytes, sample_rate: int = 16000) -> Dict[str, Any]:
+    async def process_audio(self, audio_bytes: bytes, sample_rate: int = 16000) -> Dict[str, Any]:
         """
-        Process audio input through the complete pipeline.
+        Process audio input and return results
         
         Args:
-            audio_data: Raw audio bytes
-            sample_rate: Audio sample rate in Hz
+            audio_bytes: Raw audio bytes (PCM)
+            sample_rate: Sample rate of input audio
             
         Returns:
-            Dictionary with transcription, response, and metadata
+            Dict with transcription, response, subject, and audio output
         """
-        if not self.task:
-            raise RuntimeError("Pipeline not initialized. Call setup() first.")
+        if not self.pipeline or not self.task:
+            raise RuntimeError("Pipeline not built. Call build_pipeline() first.")
         
-        logger.info("Processing audio through pipeline...")
+        logger.info(f"Processing audio ({len(audio_bytes)} bytes, {sample_rate}Hz)")
         
-        # Queue audio frame for processing
-        from pipecat.frames.frames import AudioRawFrame
-        audio_frame = AudioRawFrame(audio=audio_data, sample_rate=sample_rate, num_channels=1)
+        # Clear collectors
+        self.transcription_collector.clear()
+        self.response_collector.clear()
+        self.audio_buffer.clear_buffer()
         
-        await self.task.queue_frame(audio_frame)
-        
-        # Note: In a real-time streaming scenario, you would listen to output frames
-        # For now, this is a simplified interface
-        logger.info("Audio queued for processing")
-        
-        return {
-            "status": "processing",
-            "message": "Audio queued for pipeline processing"
-        }
+        try:
+            # Create audio frame
+            audio_frame = AudioRawFrame(
+                audio=audio_bytes,
+                sample_rate=sample_rate,
+                num_channels=1
+            )
+            
+            # Queue frames
+            await self.task.queue_frames([StartFrame(), audio_frame, EndFrame()])
+            
+            # Run pipeline (with timeout)
+            try:
+                await asyncio.wait_for(self.runner.run(self.task), timeout=30.0)
+            except asyncio.TimeoutError:
+                logger.error("Pipeline execution timeout")
+                raise
+            
+            # Collect results
+            transcription = self.transcription_collector.get_transcription()
+            response_text = self.response_collector.get_response()
+            output_audio = self.audio_buffer.get_audio_bytes()
+            
+            # Get subject from RAG service
+            subject = getattr(self.rag_service, 'last_detected_subject', 'unknown')
+            
+            results = {
+                'transcription': transcription,
+                'response': response_text,
+                'subject': subject,
+                'audio_output': output_audio,
+                'sample_rate': self.audio_buffer.sample_rate
+            }
+            
+            logger.info(f"✅ Processing complete - Transcription: '{transcription[:50]}...', Subject: {subject}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error processing audio: {e}", exc_info=True)
+            raise
     
     async def process_text(self, text: str) -> Dict[str, Any]:
         """
-        Process text input through the pipeline (bypassing STT).
+        Process text input directly (without STT)
         
         Args:
-            text: User text input
+            text: Input text question
             
         Returns:
-            Dictionary with response and metadata
+            Dict with response, subject, and audio output
         """
-        if not self.task:
-            raise RuntimeError("Pipeline not initialized. Call setup() first.")
+        if not self.pipeline or not self.task:
+            raise RuntimeError("Pipeline not built. Call build_pipeline() first.")
         
-        logger.info(f"Processing text: {text}")
+        logger.info(f"Processing text: '{text}'")
         
-        # Create transcription frame
-        transcription_frame = TranscriptionFrame(text=text, user_id="user", timestamp=None)
+        # Clear collectors
+        self.response_collector.clear()
+        self.audio_buffer.clear_buffer()
         
-        # Queue for processing
-        await self.task.queue_frame(transcription_frame)
-        
-        return {
-            "status": "processing",
-            "input": text,
-            "message": "Text queued for pipeline processing"
-        }
-    
-    async def process_question(self, question: str) -> Dict[str, Any]:
-        """
-        Process a question through RAG + LLM (without audio processing).
-        
-        This is a simplified interface for testing without full pipeline.
-        
-        Args:
-            question: User question text
+        try:
+            # Create text frame (simulate transcription)
+            text_frame = TranscriptionFrame(text=text, user_id="user")
             
-        Returns:
-            Dictionary with answer, subject, sources, etc.
-        """
-        if not self.rag or not self.llm:
-            raise RuntimeError("Services not initialized. Call setup() first.")
-        
-        logger.info(f"📝 Processing question: {question}")
-        
-        # 1. Route to subject
-        subject = self.rag.route_query(question)
-        logger.info(f"🎯 Routed to subject: {subject}")
-        
-        # 2. Retrieve documents
-        docs = self.rag.retrieve(question, subject)
-        logger.info(f"📚 Retrieved {len(docs)} documents")
-        
-        # 3. Format context
-        context = self.rag.format_context(docs)
-        
-        # 4. Create prompt
-        prompt = f"""Documents pertinents :
-{context}
-
-Question de l'étudiant : {question}
-
-Réponds de manière pédagogique en t'appuyant sur les documents ci-dessus.
-"""
-        
-        # 5. Generate response with LLM
-        logger.info("🤖 Generating LLM response...")
-        response = await self.llm.generate(prompt)
-        
-        logger.info(f"✅ Response generated: {response[:100]}...")
-        
-        return {
-            "question": question,
-            "subject": subject,
-            "answer": response,
-            "sources": [{"content": doc.page_content, "metadata": doc.metadata} for doc in docs],
-            "num_sources": len(docs),
-        }
+            # Queue frames
+            await self.task.queue_frames([StartFrame(), text_frame, EndFrame()])
+            
+            # Run pipeline
+            try:
+                await asyncio.wait_for(self.runner.run(self.task), timeout=30.0)
+            except asyncio.TimeoutError:
+                logger.error("Pipeline execution timeout")
+                raise
+            
+            # Collect results
+            response_text = self.response_collector.get_response()
+            output_audio = self.audio_buffer.get_audio_bytes()
+            
+            # Get subject from RAG service
+            subject = getattr(self.rag_service, 'last_detected_subject', 'unknown')
+            
+            results = {
+                'transcription': text,
+                'response': response_text,
+                'subject': subject,
+                'audio_output': output_audio,
+                'sample_rate': self.audio_buffer.sample_rate
+            }
+            
+            logger.info(f"✅ Text processing complete - Subject: {subject}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error processing text: {e}", exc_info=True)
+            raise
     
-    async def run(self):
-        """Run the pipeline (blocking call)."""
-        if not self.runner or not self.task:
-            raise RuntimeError("Pipeline not initialized. Call setup() first.")
+    async def cleanup(self):
+        """Cleanup resources"""
+        logger.info("Cleaning up pipeline...")
         
-        logger.info("🚀 Starting pipeline runner...")
-        await self.runner.run(self.task)
-    
-    async def stop(self):
-        """Stop the pipeline gracefully."""
         if self.task:
-            logger.info("Stopping pipeline...")
-            await self.task.queue_frame(EndFrame())
-            await self.task.cancel()
-        logger.info("✅ Pipeline stopped")
-    
-    def get_metrics(self) -> Dict[str, Any]:
-        """Get pipeline performance metrics."""
-        if not self.task or not self.enable_metrics:
-            return {}
+            try:
+                await self.task.cancel()
+            except:
+                pass
         
-        # TODO: Extract metrics from pipeline task
-        return {
-            "enabled": self.enable_metrics,
-            "message": "Metrics collection enabled (implementation pending)"
-        }
-
-
-class RAGFrameProcessor(FrameProcessor):
-    """
-    Custom frame processor to inject RAG context into LLM messages.
-    
-    This processor:
-    1. Intercepts TranscriptionFrame (user text)
-    2. Routes query to appropriate subject
-    3. Retrieves relevant documents
-    4. Adds context to LLM messages
-    """
-    
-    def __init__(self, rag_service: RAGService):
-        super().__init__()
-        self.rag = rag_service
-    
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        """Process frames and inject RAG context when needed."""
-        await super().process_frame(frame, direction)
+        # Cleanup services
+        if self.stt_service:
+            # Add cleanup if needed
+            pass
         
-        # Check if this is a user transcription
-        if isinstance(frame, TranscriptionFrame):
-            text = frame.text
-            logger.info(f"🎤 User said: {text}")
-            
-            # 1. Route to subject
-            subject = self.rag.route_query(text)
-            logger.info(f"🎯 Routed to: {subject}")
-            
-            # 2. Retrieve documents
-            docs = self.rag.retrieve(text, subject)
-            logger.info(f"📚 Retrieved {len(docs)} documents")
-            
-            # 3. Format context
-            context = self.rag.format_context(docs)
-            
-            # 4. Create enhanced prompt with context
-            enhanced_text = f"""Documents pertinents sur le sujet "{subject}" :
-{context}
-
-Question de l'étudiant : {text}
-
-Réponds en t'appuyant sur les documents ci-dessus.
-"""
-            
-            # 5. Create new message frame with enhanced context
-            message_frame = LLMMessagesAppendFrame(
-                messages=[{"role": "user", "content": enhanced_text}]
-            )
-            
-            # Push the enhanced message instead of the original transcription
-            await self.push_frame(message_frame, direction)
-            
-            # Also push an LLM run frame to trigger generation
-            await self.push_frame(LLMRunFrame(), direction)
-            
-            return  # Don't push the original transcription frame
-        
-        # Push all other frames through unchanged
-        await self.push_frame(frame, direction)
+        logger.info("✅ Pipeline cleaned up")
 
 
-# Factory function for easy pipeline creation
+# Factory function for easy instantiation
 async def create_voice_pipeline(
-    stt_model_size: str = "base",
-    llm_model: str = "qwen2:1.5b",
-    tts_voice: str = "fr_FR-siwis-medium",
-    rag_top_k: int = 4,
-    enable_metrics: bool = True,
-) -> VoicePipelineOrchestrator:
+    whisper_model: str = "base",
+    ollama_model: str = "qwen2:1.5b",
+    device: str = "cuda",
+    rag_data_path: str = "data"
+) -> VoicePipeline:
     """
-    Factory function to create and setup a voice pipeline.
+    Create and initialize a voice pipeline
     
     Args:
-        stt_model_size: Whisper model size
-        llm_model: Ollama model name
-        tts_voice: Piper TTS voice
-        rag_top_k: Number of RAG documents to retrieve
-        enable_metrics: Enable performance metrics
+        whisper_model: Whisper model size
+        ollama_model: Ollama model name
+        device: Device (cuda/cpu)
+        rag_data_path: Path to RAG data
         
     Returns:
-        Configured VoicePipelineOrchestrator instance
+        Initialized VoicePipeline
     """
-    pipeline = VoicePipelineOrchestrator(
-        stt_model_size=stt_model_size,
-        llm_model=llm_model,
-        tts_voice=tts_voice,
-        rag_top_k=rag_top_k,
-        enable_metrics=enable_metrics,
+    pipeline = VoicePipeline(
+        whisper_model=whisper_model,
+        ollama_model=ollama_model,
+        device=device,
+        rag_data_path=rag_data_path
     )
     
-    await pipeline.setup()
+    await pipeline.initialize_services()
+    pipeline.build_pipeline()
     
     return pipeline
 
 
 # Example usage
 if __name__ == "__main__":
-    async def main():
+    import numpy as np
+    
+    async def test_pipeline():
+        """Test the pipeline with dummy data"""
+        
+        # Setup logging
+        logging.basicConfig(level=logging.INFO)
+        
         # Create pipeline
         pipeline = await create_voice_pipeline(
-            stt_model_size="base",
-            llm_model="qwen2:1.5b",
-            tts_voice="fr_FR-siwis-medium",
-            rag_top_k=4,
+            whisper_model="tiny",  # Use tiny for testing
+            ollama_model="qwen2:1.5b",
+            device="cuda"
         )
         
-        # Test with a question
-        result = await pipeline.process_question(
-            "Comment résoudre l'équation x² + 2x - 8 = 0 ?"
-        )
-        
-        print("\n" + "="*60)
-        print(f"Question: {result['question']}")
+        # Test with text
+        print("\n=== Testing with text input ===")
+        result = await pipeline.process_text("Comment résoudre une équation du second degré ?")
+        print(f"Transcription: {result['transcription']}")
         print(f"Subject: {result['subject']}")
-        print(f"\nAnswer:\n{result['answer']}")
-        print(f"\nSources: {result['num_sources']} documents")
-        print("="*60)
+        print(f"Response: {result['response'][:100]}...")
+        print(f"Audio output: {len(result['audio_output'])} bytes")
         
         # Cleanup
-        await pipeline.stop()
+        await pipeline.cleanup()
+        print("\n✅ Test completed")
     
-    asyncio.run(main())
+    # Run test
+    asyncio.run(test_pipeline())
