@@ -336,12 +336,12 @@ class VoicePipeline:
             # Queue frames
             await self.task.queue_frames([StartFrame(), text_frame, EndFrame()])
             
-            # Run pipeline
-            try:
-                await asyncio.wait_for(self.runner.run(self.task), timeout=30.0)
-            except asyncio.TimeoutError:
-                logger.error("Pipeline execution timeout")
-                raise
+            # Run pipeline with proper await
+            logger.debug("Running pipeline...")
+            await self.runner.run(self.task)
+            
+            # Wait a bit for frames to be processed
+            await asyncio.sleep(0.5)
             
             # Collect results
             response_text = self.response_collector.get_response()
@@ -349,6 +349,8 @@ class VoicePipeline:
             
             # Get subject from RAG service
             subject = getattr(self.rag_service, 'last_detected_subject', 'unknown')
+            
+            logger.info(f"Response collected: {len(response_text)} chars, Audio: {len(output_audio)} bytes")
             
             results = {
                 'transcription': text,

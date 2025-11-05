@@ -61,6 +61,7 @@ class RAGServiceFAISS(FrameProcessor):
         self._indexes = {}  # subject -> faiss index
         self._metadata = {}  # subject -> metadata list
         self._initialized = False
+        self.last_detected_subject = 'unknown'  # Pour exposer le sujet détecté
         
         logger.info(f"RAGServiceFAISS initialized (path: {data_path}, model: {embedding_model})")
     
@@ -176,6 +177,9 @@ class RAGServiceFAISS(FrameProcessor):
         # Auto-detect subject if not specified
         if subject is None:
             subject = self._classify_subject(query)
+        
+        # Store detected subject for later retrieval
+        self.last_detected_subject = subject
         
         if subject not in self._indexes:
             logger.warning(f"Subject {subject} not available")
