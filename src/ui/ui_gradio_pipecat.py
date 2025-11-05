@@ -59,13 +59,19 @@ class GradioVoiceInterface:
             # Convert to bytes
             audio_bytes = audio_array.tobytes()
             
-            # Run pipeline asynchronously
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(
-                self.pipeline.process_audio(audio_bytes, sample_rate)
-            )
-            loop.close()
+            # Run pipeline asynchronously using existing event loop if available
+            try:
+                # Try to get existing loop (Colab/Jupyter)
+                loop = asyncio.get_running_loop()
+                # If we have a running loop, use run_in_executor to avoid conflicts
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    result = executor.submit(
+                        lambda: asyncio.run(self.pipeline.process_audio(audio_bytes, sample_rate))
+                    ).result()
+            except RuntimeError:
+                # No running loop, create a new one
+                result = asyncio.run(self.pipeline.process_audio(audio_bytes, sample_rate))
             
             # Extract results
             transcription = result.get('transcription', 'Aucune transcription')
@@ -73,6 +79,8 @@ class GradioVoiceInterface:
             response = result.get('response', 'Aucune réponse')
             audio_output_bytes = result.get('audio_output', b'')
             output_sample_rate = result.get('sample_rate', 22050)
+            
+            logger.info(f"Result: subject={subject}, trans_len={len(transcription)}, resp_len={len(response)}, audio_len={len(audio_output_bytes)}")
             
             # Convert output audio bytes to numpy array for Gradio
             audio_output = None
@@ -112,19 +120,27 @@ class GradioVoiceInterface:
         try:
             logger.info(f"Processing text: '{text_input}'")
             
-            # Run pipeline asynchronously
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(
-                self.pipeline.process_text(text_input)
-            )
-            loop.close()
+            # Run pipeline asynchronously using existing event loop if available
+            try:
+                # Try to get existing loop (Colab/Jupyter)
+                loop = asyncio.get_running_loop()
+                # If we have a running loop, use run_in_executor to avoid conflicts
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    result = executor.submit(
+                        lambda: asyncio.run(self.pipeline.process_text(text_input))
+                    ).result()
+            except RuntimeError:
+                # No running loop, create a new one
+                result = asyncio.run(self.pipeline.process_text(text_input))
             
             # Extract results
             subject = result.get('subject', 'unknown')
             response = result.get('response', 'Aucune réponse')
             audio_output_bytes = result.get('audio_output', b'')
             output_sample_rate = result.get('sample_rate', 22050)
+            
+            logger.info(f"Result: subject={subject}, response_len={len(response)}, audio_len={len(audio_output_bytes)}")
             
             # Convert output audio bytes to numpy array for Gradio
             audio_output = None
