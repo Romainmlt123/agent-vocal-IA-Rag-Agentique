@@ -331,17 +331,22 @@ class VoicePipeline:
         Returns:
             Dict with response, subject, and audio output
         """
+        import time
+        start_time = time.time()
+        
+        logger.info(f"[{time.time()-start_time:.1f}s] 🔵 START process_text: '{text}'")
+        
         if not self.pipeline or not self.task:
             raise RuntimeError("Pipeline not built. Call build_pipeline() first.")
         
-        logger.info(f"Processing text: '{text}'")
-        
         # Clear collectors
+        logger.info(f"[{time.time()-start_time:.1f}s] Clearing collectors...")
         self.response_collector.clear()
         self.audio_buffer.clear_buffer()
         
         try:
             # Create TEMPORARY task and runner for this request
+            logger.info(f"[{time.time()-start_time:.1f}s] Creating PipelineTask...")
             task = PipelineTask(
                 self.pipeline,
                 params=PipelineParams(
@@ -349,10 +354,11 @@ class VoicePipeline:
                     enable_usage_metrics=True
                 )
             )
+            logger.info(f"[{time.time()-start_time:.1f}s] Creating PipelineRunner...")
             runner = PipelineRunner(handle_sigint=False)
             
             # Create text frame (simulate transcription)
-            import time
+            logger.info(f"[{time.time()-start_time:.1f}s] Creating TranscriptionFrame...")
             text_frame = TranscriptionFrame(
                 text=text, 
                 user_id="user",
@@ -360,34 +366,36 @@ class VoicePipeline:
             )
             
             # Queue frames with Start/End
+            logger.info(f"[{time.time()-start_time:.1f}s] Queueing frames (Start + Transcription + End)...")
             await task.queue_frames([StartFrame(), text_frame, EndFrame()])
-            logger.debug("Frames queued with Start/End")
+            logger.info(f"[{time.time()-start_time:.1f}s] ✅ Frames queued")
             
             # Run pipeline in background task WITHOUT blocking
-            logger.debug("Starting runner as background task...")
+            logger.info(f"[{time.time()-start_time:.1f}s] Starting runner as background task...")
             runner_task = asyncio.create_task(runner.run(task))
+            logger.info(f"[{time.time()-start_time:.1f}s] Runner task created, waiting for completion (30s timeout)...")
             
             # Wait for runner to complete (with timeout)
             try:
                 await asyncio.wait_for(runner_task, timeout=30.0)
-                logger.debug("Runner completed successfully")
+                logger.info(f"[{time.time()-start_time:.1f}s] ✅ Runner completed successfully")
             except asyncio.TimeoutError:
-                logger.error("Runner timeout after 30s")
+                logger.error(f"[{time.time()-start_time:.1f}s] ❌ Runner timeout after 30s")
                 raise
             
             # Short delay for frame collection
+            logger.info(f"[{time.time()-start_time:.1f}s] Waiting 0.5s for frame collection...")
             await asyncio.sleep(0.5)
             
             # Collect results
+            logger.info(f"[{time.time()-start_time:.1f}s] Collecting results...")
             response_text = self.response_collector.get_response()
             output_audio = self.audio_buffer.get_audio_bytes()
             
-            logger.debug(f"After collection: response={len(response_text)} chars, audio={len(output_audio)} bytes")
+            logger.info(f"[{time.time()-start_time:.1f}s] Response: {len(response_text)} chars, Audio: {len(output_audio)} bytes")
             
             # Get subject from RAG service
             subject = getattr(self.rag_service, 'last_detected_subject', 'unknown')
-            
-            logger.info(f"Response collected: {len(response_text)} chars, Audio: {len(output_audio)} bytes")
             
             results = {
                 'transcription': text,
@@ -397,11 +405,11 @@ class VoicePipeline:
                 'sample_rate': self.audio_buffer.sample_rate
             }
             
-            logger.info(f"✅ Text processing complete - Subject: {subject}")
+            logger.info(f"[{time.time()-start_time:.1f}s] ✅ COMPLETE - Subject: {subject}")
             return results
             
         except Exception as e:
-            logger.error(f"Error processing text: {e}", exc_info=True)
+            logger.error(f"[{time.time()-start_time:.1f}s] ❌ ERROR: {e}", exc_info=True)
             raise
     
     async def cleanup(self):

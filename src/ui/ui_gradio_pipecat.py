@@ -114,6 +114,11 @@ class GradioVoiceInterface:
         Returns:
             Tuple (subject, response, audio_output)
         """
+        import time
+        start_time = time.time()
+        
+        logger.info(f"[{time.time()-start_time:.1f}s] 🎯 GRADIO process_text_async START")
+        
         # IMMEDIATE TEST - return dummy data to verify interface works
         if text_input and "TEST" in text_input.upper():
             return "🧪 TEST", "Interface fonctionne ! Question reçue: " + text_input, None
@@ -122,12 +127,13 @@ class GradioVoiceInterface:
             return "❓ Non détecté", "❌ Veuillez entrer une question", None
         
         try:
-            logger.info(f"Processing text (async): '{text_input}'")
+            logger.info(f"[{time.time()-start_time:.1f}s] Processing text: '{text_input}'")
             
             # Call pipeline directly without creating new event loop
+            logger.info(f"[{time.time()-start_time:.1f}s] Calling pipeline.process_text()...")
             result = await self.pipeline.process_text(text_input)
             
-            logger.info(f"Pipeline returned: {result.keys() if result else 'None'}")
+            logger.info(f"[{time.time()-start_time:.1f}s] Pipeline returned: {result.keys() if result else 'None'}")
             
             # Extract results
             subject = result.get('subject', 'unknown')
@@ -135,7 +141,7 @@ class GradioVoiceInterface:
             audio_output_bytes = result.get('audio_output', b'')
             output_sample_rate = result.get('sample_rate', 22050)
             
-            logger.info(f"Result: subject={subject}, response_len={len(response)}, audio_len={len(audio_output_bytes)}")
+            logger.info(f"[{time.time()-start_time:.1f}s] Result: subject={subject}, response_len={len(response)}, audio_len={len(audio_output_bytes)}")
             
             # DEBUG: Add debug info to response
             debug_info = f"\n\n--- DEBUG INFO ---\n"
@@ -143,6 +149,7 @@ class GradioVoiceInterface:
             debug_info += f"Longueur réponse: {len(response)} caractères\n"
             debug_info += f"Audio généré: {len(audio_output_bytes)} bytes\n"
             debug_info += f"Sample rate: {output_sample_rate} Hz\n"
+            debug_info += f"Temps total: {time.time()-start_time:.1f}s\n"
             
             # If response is empty, add more debug
             if not response or response == 'Aucune réponse':
@@ -155,12 +162,12 @@ class GradioVoiceInterface:
             # Convert output audio bytes to numpy array for Gradio
             audio_output = None
             if audio_output_bytes and len(audio_output_bytes) > 0:
-                logger.info(f"Converting {len(audio_output_bytes)} bytes to audio array")
+                logger.info(f"[{time.time()-start_time:.1f}s] Converting {len(audio_output_bytes)} bytes to audio array")
                 audio_array_out = np.frombuffer(audio_output_bytes, dtype=np.int16)
                 audio_output = (output_sample_rate, audio_array_out)
-                logger.info(f"Audio output shape: {audio_array_out.shape}")
+                logger.info(f"[{time.time()-start_time:.1f}s] Audio output shape: {audio_array_out.shape}")
             else:
-                logger.warning("No audio output bytes received!")
+                logger.warning(f"[{time.time()-start_time:.1f}s] No audio output bytes received!")
             
             # Format subject emoji
             subject_emoji = {
@@ -170,27 +177,42 @@ class GradioVoiceInterface:
                 'unknown': '❓ Non détecté'
             }.get(subject, f'📚 {subject}')
             
-            logger.info(f"✅ Text processing complete: {subject} -> {subject_emoji}")
+            logger.info(f"[{time.time()-start_time:.1f}s] ✅ GRADIO COMPLETE: {subject} -> {subject_emoji}")
             
             return subject_emoji, response_with_debug, audio_output
             
         except Exception as e:
-            logger.error(f"Error processing text: {e}", exc_info=True)
+            logger.error(f"[{time.time()-start_time:.1f}s] ❌ GRADIO ERROR: {e}", exc_info=True)
             return "", f"❌ Erreur: {str(e)}", None
     
     def process_text_sync(self, text_input):
         """
         Synchronous wrapper that runs async function in event loop
         """
+        import time
+        start_time = time.time()
+        
+        logger.info(f"[{time.time()-start_time:.1f}s] 🔷 GRADIO process_text_sync START")
+        
         try:
             # Get the current event loop (should be Colab's loop)
+            logger.info(f"[{time.time()-start_time:.1f}s] Importing nest_asyncio...")
             import nest_asyncio
+            
+            logger.info(f"[{time.time()-start_time:.1f}s] Applying nest_asyncio...")
             nest_asyncio.apply()  # Allow nested event loops
             
+            logger.info(f"[{time.time()-start_time:.1f}s] Getting event loop...")
             loop = asyncio.get_event_loop()
-            return loop.run_until_complete(self.process_text_async(text_input))
+            
+            logger.info(f"[{time.time()-start_time:.1f}s] Running async function with run_until_complete...")
+            result = loop.run_until_complete(self.process_text_async(text_input))
+            
+            logger.info(f"[{time.time()-start_time:.1f}s] ✅ GRADIO process_text_sync COMPLETE")
+            return result
+            
         except Exception as e:
-            logger.error(f"Sync wrapper error: {e}", exc_info=True)
+            logger.error(f"[{time.time()-start_time:.1f}s] ❌ Sync wrapper error: {e}", exc_info=True)
             return "", f"❌ Erreur: {str(e)}", None
     
     def build_interface(self):
