@@ -114,10 +114,18 @@ class GradioVoiceInterface:
         Returns:
             Tuple (subject, response, audio_output)
         """
-        if not text_input or text_input.strip() == "":
-            return "", "❌ Veuillez entrer une question", None
+        # IMMEDIATE TEST - return dummy data to verify interface works
+        if text_input and "TEST" in text_input.upper():
+            return "🧪 TEST", "Interface fonctionne ! Question reçue: " + text_input, None
         
+        if not text_input or text_input.strip() == "":
+            return "❓ Non détecté", "❌ Veuillez entrer une question", None
+        
+        # Return immediate feedback
         try:
+            # First, return a "processing" message
+            processing_msg = f"🔄 Traitement en cours de votre question...\n\nQuestion: {text_input}\n\n"
+            
             logger.info(f"Processing text: '{text_input}'")
             
             # Run pipeline asynchronously using existing event loop if available

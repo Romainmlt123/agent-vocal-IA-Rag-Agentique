@@ -112,11 +112,14 @@ class ResponseCollector(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         
+        # Log all frames to debug
+        logger.debug(f"ResponseCollector received frame: {type(frame).__name__}")
+        
         if isinstance(frame, TextFrame) and not isinstance(frame, TranscriptionFrame):
             # C'est une réponse du LLM ou du RAG
             if frame.text:
                 self.response += frame.text
-                logger.debug(f"Response chunk: {frame.text}")
+                logger.info(f"Response chunk collected: {len(frame.text)} chars - '{frame.text[:50]}...'")
         
         await self.push_frame(frame, direction)
     
@@ -264,6 +267,17 @@ class VoicePipeline:
         self.audio_buffer.clear_buffer()
         
         try:
+            # IMPORTANT: Create new task and runner for each call
+            # This is necessary when called from different event loops (like Gradio)
+            task = PipelineTask(
+                self.pipeline,
+                params=PipelineParams(
+                    enable_metrics=True,
+                    enable_usage_metrics=True
+                )
+            )
+            runner = PipelineRunner(handle_sigint=False)
+            
             # Create audio frame
             audio_frame = AudioRawFrame(
                 audio=audio_bytes,
@@ -272,17 +286,17 @@ class VoicePipeline:
             )
             
             # Queue frames
-            await self.task.queue_frames([StartFrame(), audio_frame, EndFrame()])
+            await task.queue_frames([StartFrame(), audio_frame, EndFrame()])
             
             # Run pipeline (with timeout)
             try:
-                await asyncio.wait_for(self.runner.run(self.task), timeout=30.0)
+                await asyncio.wait_for(runner.run(task), timeout=30.0)
             except asyncio.TimeoutError:
                 logger.error("Pipeline execution timeout")
                 raise
             
             # Wait for TTS frames to be fully collected
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(5.0)
             
             # Collect results
             transcription = self.transcription_collector.get_transcription()
@@ -327,6 +341,17 @@ class VoicePipeline:
         self.audio_buffer.clear_buffer()
         
         try:
+            # IMPORTANT: Create new task and runner for each call
+            # This is necessary when called from different event loops (like Gradio)
+            task = PipelineTask(
+                self.pipeline,
+                params=PipelineParams(
+                    enable_metrics=True,
+                    enable_usage_metrics=True
+                )
+            )
+            runner = PipelineRunner(handle_sigint=False)
+            
             # Create text frame (simulate transcription)
             # TranscriptionFrame requires timestamp in newer Pipecat versions
             import time
@@ -337,19 +362,24 @@ class VoicePipeline:
             )
             
             # Queue frames
-            await self.task.queue_frames([StartFrame(), text_frame, EndFrame()])
+            await task.queue_frames([StartFrame(), text_frame, EndFrame()])
             
             # Run pipeline with proper await
             logger.debug("Running pipeline...")
-            await self.runner.run(self.task)
+            await runner.run(task)
             
             # Wait for TTS frames to be fully collected
-            # The audio generation can take a few seconds
-            await asyncio.sleep(2.0)  # Increased from 0.5 to 2.0 seconds
+            # The audio generation can take several seconds
+            logger.debug("Pipeline finished, waiting for frame collection...")
+            await asyncio.sleep(5.0)  # Increased from 2.0 to 5.0 seconds
             
             # Collect results
             response_text = self.response_collector.get_response()
             output_audio = self.audio_buffer.get_audio_bytes()
+            
+            logger.debug(f"After collection: response={len(response_text)} chars, audio={len(output_audio)} bytes")
+            logger.debug(f"Response collector text: '{response_text[:100] if response_text else 'EMPTY'}'")
+            logger.debug(f"Audio buffer has {len(self.audio_buffer.audio_buffer)} chunks")
             
             # Get subject from RAG service
             subject = getattr(self.rag_service, 'last_detected_subject', 'unknown')
