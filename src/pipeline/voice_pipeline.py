@@ -32,7 +32,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from services.local_stt import LocalSTTService
 from services.local_llm import LocalLLMService
 from services.local_tts import LocalTTSService
-from services.rag_service import RAGService
+from services.rag_service_faiss import RAGServiceFAISS as RAGService
 
 logger = logging.getLogger(__name__)
 
