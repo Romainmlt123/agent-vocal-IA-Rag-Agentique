@@ -10,7 +10,7 @@ import tempfile
 from typing import Optional, AsyncGenerator
 from pathlib import Path
 
-from pipecat.frames.frames import Frame, AudioRawFrame, TextFrame, ErrorFrame
+from pipecat.frames.frames import Frame, AudioRawFrame, TextFrame, ErrorFrame, TTSAudioRawFrame
 from pipecat.processors.frame_processor import FrameProcessor
 from loguru import logger
 
@@ -143,8 +143,13 @@ class LocalTTSService(FrameProcessor):
             # Generate audio
             audio_bytes = await self._synthesize(text)
             
-            # Create audio frame
-            audio_frame = AudioRawFrame(
+            # Skip if no audio generated
+            if not audio_bytes or len(audio_bytes) == 0:
+                logger.warning("No audio generated, skipping frame")
+                return
+            
+            # Create audio frame using TTSAudioRawFrame (has proper ID handling)
+            audio_frame = TTSAudioRawFrame(
                 audio=audio_bytes,
                 sample_rate=self.sample_rate,
                 num_channels=1
@@ -178,28 +183,53 @@ class LocalTTSService(FrameProcessor):
         def _synthesize_blocking(voice, text_input):
             """Blocking synthesis that consumes the generator."""
             import numpy as np
+            import wave
+            import io
             
-            # Piper returns a generator of AudioChunk objects
+            # Collect all audio from Piper generator
             audio_chunks = []
-            for audio_chunk in voice.synthesize(text_input):
-                # AudioChunk is a numpy array, convert to bytes
-                if isinstance(audio_chunk, np.ndarray):
-                    # Convert float32 to int16 PCM
-                    audio_int16 = (audio_chunk * 32767).astype(np.int16)
-                    audio_chunks.append(audio_int16.tobytes())
-                elif isinstance(audio_chunk, bytes):
-                    audio_chunks.append(audio_chunk)
-                elif hasattr(audio_chunk, 'audio'):
-                    # If it's an object with an audio attribute
-                    audio_data = audio_chunk.audio
-                    if isinstance(audio_data, np.ndarray):
-                        audio_int16 = (audio_data * 32767).astype(np.int16)
-                        audio_chunks.append(audio_int16.tobytes())
-                    else:
-                        audio_chunks.append(audio_data)
+            chunk_count = 0
             
-            # Concatenate all chunks into single bytes object
-            return b''.join(audio_chunks)
+            for audio_chunk in voice.synthesize(text_input):
+                chunk_count += 1
+                
+                # Debug: log chunk type
+                chunk_type = type(audio_chunk).__name__
+                logger.debug(f"Chunk {chunk_count}: type={chunk_type}")
+                
+                # Try different extraction methods
+                if isinstance(audio_chunk, bytes):
+                    audio_chunks.append(audio_chunk)
+                elif isinstance(audio_chunk, np.ndarray):
+                    # Convert numpy array to PCM bytes
+                    if audio_chunk.dtype == np.float32:
+                        # Convert float32 [-1, 1] to int16 PCM
+                        audio_int16 = (audio_chunk * 32767).astype(np.int16)
+                    else:
+                        audio_int16 = audio_chunk.astype(np.int16)
+                    audio_chunks.append(audio_int16.tobytes())
+                elif hasattr(audio_chunk, 'audio'):
+                    # Extract audio attribute
+                    audio_data = audio_chunk.audio
+                    if isinstance(audio_data, bytes):
+                        audio_chunks.append(audio_data)
+                    elif isinstance(audio_data, np.ndarray):
+                        if audio_data.dtype == np.float32:
+                            audio_int16 = (audio_data * 32767).astype(np.int16)
+                        else:
+                            audio_int16 = audio_data.astype(np.int16)
+                        audio_chunks.append(audio_int16.tobytes())
+            
+            logger.debug(f"Collected {chunk_count} chunks, total {len(audio_chunks)} byte arrays")
+            
+            # Concatenate all chunks
+            if not audio_chunks:
+                logger.warning("No audio chunks collected!")
+                return b''
+            
+            result = b''.join(audio_chunks)
+            logger.debug(f"Final audio size: {len(result)} bytes")
+            return result
         
         audio_data = await loop.run_in_executor(
             None,
