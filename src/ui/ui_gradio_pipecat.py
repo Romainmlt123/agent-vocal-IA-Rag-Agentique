@@ -124,6 +124,7 @@ class GradioVoiceInterface:
             try:
                 # Try to get existing loop (Colab/Jupyter)
                 loop = asyncio.get_running_loop()
+                logger.info("Using existing event loop")
                 # If we have a running loop, use run_in_executor to avoid conflicts
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -132,7 +133,11 @@ class GradioVoiceInterface:
                     ).result()
             except RuntimeError:
                 # No running loop, create a new one
+                logger.info("Creating new event loop")
                 result = asyncio.run(self.pipeline.process_text(text_input))
+            
+            logger.info(f"Pipeline returned result: {type(result)}")
+            logger.info(f"Result keys: {result.keys() if result else 'None'}")
             
             # Extract results
             subject = result.get('subject', 'unknown')
@@ -142,11 +147,30 @@ class GradioVoiceInterface:
             
             logger.info(f"Result: subject={subject}, response_len={len(response)}, audio_len={len(audio_output_bytes)}")
             
+            # DEBUG: Add debug info to response
+            debug_info = f"\n\n--- DEBUG INFO ---\n"
+            debug_info += f"Domaine brut: {subject}\n"
+            debug_info += f"Longueur réponse: {len(response)} caractères\n"
+            debug_info += f"Audio généré: {len(audio_output_bytes)} bytes\n"
+            debug_info += f"Sample rate: {output_sample_rate} Hz\n"
+            
+            # If response is empty, add more debug
+            if not response or response == 'Aucune réponse':
+                debug_info += "\n⚠️ PROBLÈME: Réponse vide!\n"
+                debug_info += f"Résultat complet du pipeline: {result}\n"
+            
+            # Add debug to response
+            response_with_debug = response + debug_info
+            
             # Convert output audio bytes to numpy array for Gradio
             audio_output = None
-            if audio_output_bytes:
+            if audio_output_bytes and len(audio_output_bytes) > 0:
+                logger.info(f"Converting {len(audio_output_bytes)} bytes to audio array")
                 audio_array_out = np.frombuffer(audio_output_bytes, dtype=np.int16)
                 audio_output = (output_sample_rate, audio_array_out)
+                logger.info(f"Audio output shape: {audio_array_out.shape}")
+            else:
+                logger.warning("No audio output bytes received!")
             
             # Format subject emoji
             subject_emoji = {
@@ -156,9 +180,9 @@ class GradioVoiceInterface:
                 'unknown': '❓ Non détecté'
             }.get(subject, f'📚 {subject}')
             
-            logger.info(f"✅ Text processing complete: {subject}")
+            logger.info(f"✅ Text processing complete: {subject} -> {subject_emoji}")
             
-            return subject_emoji, response, audio_output
+            return subject_emoji, response_with_debug, audio_output
             
         except Exception as e:
             logger.error(f"Error processing text: {e}", exc_info=True)
