@@ -325,7 +325,13 @@ class VoicePipeline:
         
         try:
             # Create text frame (simulate transcription)
-            text_frame = TranscriptionFrame(text=text, user_id="user")
+            # TranscriptionFrame requires timestamp in newer Pipecat versions
+            import time
+            text_frame = TranscriptionFrame(
+                text=text, 
+                user_id="user",
+                timestamp=time.time()
+            )
             
             # Queue frames
             await self.task.queue_frames([StartFrame(), text_frame, EndFrame()])

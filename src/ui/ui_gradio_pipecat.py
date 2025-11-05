@@ -195,7 +195,7 @@ class GradioVoiceInterface:
                     with gr.Row():
                         with gr.Column(scale=1):
                             audio_input = gr.Audio(
-                                source="microphone",
+                                sources=["microphone"],  # 'sources' (plural) in newer Gradio
                                 type="numpy",
                                 label="🎤 Enregistrement vocal"
                             )
