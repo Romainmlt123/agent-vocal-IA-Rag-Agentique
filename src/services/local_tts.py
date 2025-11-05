@@ -193,14 +193,22 @@ class LocalTTSService(FrameProcessor):
             for audio_chunk in voice.synthesize(text_input):
                 chunk_count += 1
                 
-                # Debug: log chunk type
+                # Debug: log chunk type and attributes
                 chunk_type = type(audio_chunk).__name__
                 logger.debug(f"Chunk {chunk_count}: type={chunk_type}")
                 
+                # Log available attributes
+                if hasattr(audio_chunk, '__dict__'):
+                    logger.debug(f"  Attributes: {list(audio_chunk.__dict__.keys())}")
+                elif hasattr(audio_chunk, '_fields'):
+                    logger.debug(f"  Fields: {audio_chunk._fields}")
+                
                 # Try different extraction methods
                 if isinstance(audio_chunk, bytes):
+                    logger.debug(f"  -> bytes path: {len(audio_chunk)} bytes")
                     audio_chunks.append(audio_chunk)
                 elif isinstance(audio_chunk, np.ndarray):
+                    logger.debug(f"  -> numpy path: shape={audio_chunk.shape}, dtype={audio_chunk.dtype}")
                     # Convert numpy array to PCM bytes
                     if audio_chunk.dtype == np.float32:
                         # Convert float32 [-1, 1] to int16 PCM
@@ -209,6 +217,7 @@ class LocalTTSService(FrameProcessor):
                         audio_int16 = audio_chunk.astype(np.int16)
                     audio_chunks.append(audio_int16.tobytes())
                 elif hasattr(audio_chunk, 'audio'):
+                    logger.debug(f"  -> has .audio attribute")
                     # Extract audio attribute
                     audio_data = audio_chunk.audio
                     if isinstance(audio_data, bytes):
@@ -219,6 +228,30 @@ class LocalTTSService(FrameProcessor):
                         else:
                             audio_int16 = audio_data.astype(np.int16)
                         audio_chunks.append(audio_int16.tobytes())
+                else:
+                    # Try to access as named tuple or dataclass
+                    logger.debug(f"  -> trying direct access")
+                    try:
+                        # Maybe it's a named tuple with 'audio' field
+                        if hasattr(audio_chunk, 'audio'):
+                            data = audio_chunk.audio
+                        elif len(audio_chunk) > 0:
+                            data = audio_chunk[0]  # Try first element
+                        else:
+                            data = audio_chunk
+                        
+                        logger.debug(f"  -> extracted data type: {type(data).__name__}")
+                        
+                        if isinstance(data, bytes):
+                            audio_chunks.append(data)
+                        elif isinstance(data, np.ndarray):
+                            if data.dtype == np.float32:
+                                audio_int16 = (data * 32767).astype(np.int16)
+                            else:
+                                audio_int16 = data.astype(np.int16)
+                            audio_chunks.append(audio_int16.tobytes())
+                    except Exception as e:
+                        logger.error(f"  -> Failed to extract: {e}")
             
             logger.debug(f"Collected {chunk_count} chunks, total {len(audio_chunks)} byte arrays")
             
