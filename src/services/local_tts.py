@@ -67,14 +67,22 @@ class LocalTTSService(FrameProcessor):
             return
         
         try:
-            # Download voice model if not present
-            model_path = Path.home() / ".local" / "share" / "piper" / "voices" / f"{self.voice_model}.onnx"
+            # Try project-local models first (for Colab)
+            project_model_path = Path("models/voices") / f"{self.voice_model}.onnx"
             
-            if not model_path.exists():
-                logger.info(f"Downloading voice model: {self.voice_model}")
-                await self._download_voice_model()
+            if project_model_path.exists():
+                logger.info(f"Using project voice model: {project_model_path}")
+                model_path = project_model_path
+            else:
+                # Fallback to default Piper location
+                model_path = Path.home() / ".local" / "share" / "piper" / "voices" / f"{self.voice_model}.onnx"
+                
+                if not model_path.exists():
+                    logger.info(f"Downloading voice model: {self.voice_model}")
+                    await self._download_voice_model()
             
             # Load voice model
+            logger.info(f"Loading voice from: {model_path}")
             self._voice = PiperVoice.load(str(model_path))
             self._initialized = True
             logger.success(f"Voice model loaded: {self.voice_model}")
