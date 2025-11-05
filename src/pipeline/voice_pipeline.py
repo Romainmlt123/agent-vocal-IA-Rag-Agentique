@@ -296,7 +296,7 @@ class VoicePipeline:
                 raise
             
             # Wait for TTS frames to be fully collected
-            await asyncio.sleep(5.0)
+            await asyncio.sleep(1.0)  # Reduced from 5.0 to 1.0
             
             # Collect results
             transcription = self.transcription_collector.get_transcription()
@@ -369,9 +369,9 @@ class VoicePipeline:
             await runner.run(task)
             
             # Wait for TTS frames to be fully collected
-            # The audio generation can take several seconds
+            # Reduce wait time to avoid long delays
             logger.debug("Pipeline finished, waiting for frame collection...")
-            await asyncio.sleep(5.0)  # Increased from 2.0 to 5.0 seconds
+            await asyncio.sleep(1.0)  # Reduced from 5.0 to 1.0 seconds
             
             # Collect results
             response_text = self.response_collector.get_response()
